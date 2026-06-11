@@ -1,0 +1,114 @@
+Timer Module 
+===============================================================
+module door_timer #(parameter WIDTH = 24, parameter LIMIT = 24'd5_000_000) ( 
+    input logic clk, reset, start, 
+    output logic timer_done 
+); 
+    logic [WIDTH-1:0] cnt; 
+    always_ff @(posedge clk or posedge reset) begin 
+        if (reset) begin 
+12 
+ 
+            cnt <= 0; timer_done <= 0; 
+        end else if (start) begin 
+            if (cnt >= LIMIT) begin 
+                cnt <= 0; timer_done <= 1; 
+            end else begin 
+                cnt <= cnt + 1; timer_done <= 0; 
+            end 
+        end else begin 
+            cnt <= 0; timer_done <= 0; 
+        end 
+    end 
+endmodule 
+
+
+
+===============================================================
+Request Processing Module 
+===============================================================
+
+always_comb begin 
+    req_exists = 0; 
+    best_distance = 7; 
+    nearest_req = currFloor; 
+    for (int i = 0; i < 5; i++) begin 
+        if (requests[i]) begin 
+            req_exists = 1; 
+13 
+ 
+            distance = (currFloor > i) ? (currFloor - i) : (i - currFloor); 
+            if (distance < best_distance) begin 
+                best_distance = distance; 
+                nearest_req = i[2:0]; 
+            end 
+        end 
+    end 
+end 
+========================
+ 
+ FSM Next-State Logic 
+========================
+always_comb begin 
+    ns = cs; 
+    case (cs) 
+        IDLE: begin 
+            if (reset) ns = IDLE; 
+            else if (req_exists) begin 
+                if (nearest_req > currFloor) ns = GOING_UP; 
+                else if (nearest_req < currFloor) ns = GOING_DOWN; 
+                else ns = DOOR_OPEN; 
+            end else ns = IDLE; 
+        end 
+14 
+ 
+        GOING_UP: ns = (at_target) ? DOOR_OPEN : GOING_UP; 
+        GOING_DOWN: ns = (at_target) ? DOOR_OPEN : GOING_DOWN; 
+        DOOR_OPEN: ns = (timer_done) ? IDLE : DOOR_OPEN; 
+        default: ns = IDLE; 
+    endcase 
+end 
+================== 
+State Register 
+===================
+always_ff @(posedge clk or posedge reset) begin 
+    if (reset) cs <= IDLE; 
+    else cs <= ns; 
+end
+========================== 
+ Top-Level Integration 
+============================
+• All modules are combined in elevator_fsm_5floor. 
+• Inputs: requests, currFloor, at_target, timer_done. 
+• Outputs: motor_up, motor_down, door_open, idle.
+============= 
+Testbench 
+=============
+
+initial begin 
+    reset = 1; requests = 0; currFloor = 0; 
+    at_target = 0; timer_done = 0; 
+    #25 reset = 0; 
+ 
+15 
+ 
+    // Request floors 1 & 4 
+    #20 requests[1] = 1; requests[4] = 1; 
+ 
+    // Move to floor 1 
+    #80 currFloor = 1; at_target = 1; #10 at_target = 0; 
+    #100 timer_done = 1; #10 timer_done = 0; requests[1] = 0; 
+ 
+    // Move to floor 4 
+    #80 currFloor = 2; #80 currFloor = 3; #80 currFloor = 4; 
+    at_target = 1; #10 at_target = 0; 
+    #100 timer_done = 1; #10 timer_done = 0; requests[4] = 0; 
+ 
+    // Request floor 2 and go down 
+    #50 requests[2] = 1; #80 currFloor = 3; #80 currFloor = 2; 
+    at_target = 1; #10 at_target = 0; 
+    #100 timer_done = 1; #10 timer_done = 0; requests[2] = 0; 
+ 
+    #300; $display("Simulation done!"); $finish; 
+end 
+
